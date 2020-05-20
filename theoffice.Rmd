@@ -1,0 +1,71 @@
+---
+title: "office"
+author: "Sherry Hu"
+date: "5/19/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# libraries 
+library(schrute)
+library(tibble)
+library(forcats)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+# load in data
+transcripts <- schrute::theoffice
+head(transcripts)
+
+ratings <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-17/office_ratings.csv')
+head(ratings)
+```
+
+```{r}
+# average rating across 9 seasons 
+ratings %>% 
+  group_by(season) %>%
+  summarize(avg_rating = mean(imdb_rating)) %>%
+  ggplot(aes(season, avg_rating)) + 
+  geom_line() + 
+  scale_x_continuous(breaks =1:9)
+```
+
+```{r}
+# ratings by episode 
+ratings %>%
+  mutate(title = fct_inorder(title),
+         episode_number = row_number()) %>%
+  ggplot(aes(episode_number, imdb_rating)) + 
+  geom_line(group = 1) + 
+  geom_point(aes(color = factor(season))) + 
+  expand_limits(x = -8) + 
+  geom_smooth(group = 1) +
+  theme(axis.text.x = element_blank(), panel.grid.major.x = element_blank()) + 
+  labs(x = "Episode number",
+       y = "IMDB Rating",
+       title = "Popularity of The Office episodes over time",
+       subtitle = "Color represents season, size represents number of ratings")
+
+# ratings by episode w/ labels 
+ratings %>%
+  mutate(title = fct_inorder(title)) %>%
+  ggplot(aes(title, imdb_rating)) + 
+  geom_line(group = 1) + 
+  geom_point(aes(color = factor(season))) + 
+  geom_text(aes(label = title), check_overlap = TRUE, hjust = 1) + 
+  theme(axis.text.x = element_blank(), panel.grid.major.x = element_blank())
+```
+
+```{r}
+unique(ratings$imdb_rating)
+```
+
+
+
