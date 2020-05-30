@@ -16,6 +16,10 @@ library(tibble)
 library(forcats)
 library(dplyr)
 library(ggplot2)
+library(tidytext)
+library(stringr)
+library(textdata)
+library(tidyr)
 ```
 
 ```{r}
@@ -28,13 +32,29 @@ head(ratings)
 ```
 
 ```{r}
+nrow(transcripts)
+```
+
+```{r}
+# make season and episode integers
+# remove "" for parsing issues
+transcripts %>% 
+  mutate(season = as.integer(season),
+         episode = as.integer(episode)) %>%
+  mutate(character = str_remove_all(character, '"'))
+```
+
+
+```{r}
 # average rating across 9 seasons 
 ratings %>% 
   group_by(season) %>%
-  summarize(avg_rating = mean(imdb_rating)) %>%
+  summarise(avg_rating = mean(imdb_rating)) %>%
   ggplot(aes(season, avg_rating)) + 
   geom_line() + 
-  scale_x_continuous(breaks =1:9)
+  scale_x_continuous(breaks =1:9) + 
+  ggtitle("Average IMDB Rating for Seasons of The Office") + 
+  xlab("Season") + ylab("Average IMDB Rating")
 ```
 
 ```{r}
@@ -64,8 +84,210 @@ ratings %>%
 ```
 
 ```{r}
-unique(ratings$imdb_rating)
+# Looking at how many lines each character has
+transcripts %>% count(character, sort = TRUE)
 ```
 
+```{r}
+unique(sort(transcripts$character))
+```
+
+From the above list, we see that there are a lot of errors in spelling. For example, "Michael" and "Micahel" refer to the same character. We attempt to fix this to the best of our ability. 
+
+```{r}
+# fixing Michael errors 
+transcripts$character[transcripts$character == "Micahel"] <- "Michael"
+transcripts$character[transcripts$character == "Micael"] <- "Michael"
+transcripts$character[transcripts$character == "Michae"] <- "Michael"
+transcripts$character[transcripts$character == "Mihael"] <- "Michael"
+transcripts$character[transcripts$character == "Miichael"] <- "Michael"
+transcripts$character[transcripts$character == "Micheal"] <- "Michael"
+transcripts$character[transcripts$character == "Michal"] <- "Michael"
+transcripts$character[transcripts$character == "Michel"] <- "Michael"
+transcripts$character[transcripts$character == "Michael "] <- "Michael"
+transcripts$character[transcripts$character == "MIchael"] <- "Michael"
+transcripts$character[transcripts$character == "M ichael"] <- "Michael"
+
+# fixing Pam errors
+transcripts$character[transcripts$character == "Pam "] <- "Pam"
+
+# fixing Jim errors
+transcripts$character[transcripts$character == "JIm"] <- "Jim"
+transcripts$character[transcripts$character == "Jim "] <- "Jim"
+
+# fixing Dwight errors
+transcripts$character[transcripts$character == "Dwight "] <- "Dwight"
+transcripts$character[transcripts$character == "Dwight."] <- "Dwight"
+transcripts$character[transcripts$character == "DwightKSchrute"] <- "Dwight"
+
+# fixing Angela errors
+transcripts$character[transcripts$character == "\"Angela\""] <- "Angela"
+transcripts$character[transcripts$character == "Anglea"] <- "Angela"
+transcripts$character[transcripts$character == "Angel"] <- "Angela"
+transcripts$character[transcripts$character == "Angels"] <- "Angela"
+
+# fixing Ryan errors
+transcripts$character[transcripts$character == "Ryan Howard"] <- "Ryan"
+
+# fixing Andy errors
+transcripts$character[transcripts$character == "sAndy"] <- "Andy"
+
+# fixing Robert California errors
+transcripts$character[transcripts$character == "Robert"] <- "Robert California"
+
+# fixing Stanley errors
+transcripts$character[transcripts$character == "Stanely"] <- "Stanley"
+
+# fixing Meredith errors
+transcripts$character[transcripts$character == "Meridith"] <- "Meredith"
+
+# fixing Darryl errors
+transcripts$character[transcripts$character ==  "Darrly"] <- "Darryl"
+transcripts$character[transcripts$character ==  "Darry"] <- "Darryl"
+transcripts$character[transcripts$character ==  "Daryl"] <- "Darryl"
+                          
+# fixing Phyllis errors
+transcripts$character[transcripts$character ==  "Phylis"] <- "Phyllis"
+transcripts$character[transcripts$character ==  "Phyliss"] <- "Phyllis"
+
+# fixing Holly errors
+transcripts$character[transcripts$character ==  "Holy"] <- "Holly"
+
+# fixing Todd Packer errors
+transcripts$character[transcripts$character ==  "Sweeney Todd"] <- "Todd Packer"
+transcripts$character[transcripts$character ==  "Todd"] <- "Todd Packer"
+
+# fixing David Wallace errors
+transcripts$character[transcripts$character ==  "David Wallcve"] <- "David Wallace"
+transcripts$character[transcripts$character ==  "Dacvid Walalce"] <- "David Wallace"
+transcripts$character[transcripts$character ==  "Dacvid Wallace"] <- "David Wallace"
+
+# fixing Bob Vance errors
+transcripts$character[transcripts$character ==  "Bob"] <- "Bob Vance"
+transcripts$character[transcripts$character ==  "Bob Vance, Vance Refrigeration"] <- "Bob Vance"
+
+# Character personalities stay consistent whether or not they're on the phone
+transcripts$character[transcripts$character == "Michael [on phone]" ] <- "Michael"
+transcripts$character[transcripts$character == "Pam [on phone]"] <- "Pam"
+transcripts$character[transcripts$character ==  "Jan [on phone]"] <- "Jan"
+transcripts$character[transcripts$character == "Dwight [on phone]"] <- "Dwight"
+
+# D is mapped to Dwight because it's his nickname
+transcripts$character[transcripts$character == "D"] <- "Dwight"
+
+```
+
+Next, we would like to drop some characters. We only keep characters who are listed as "Main Characters" or "Supporting Characters" on this official wiki page for The Office: https://theoffice.fandom.com/wiki/Main_Characters. 
+
+```{r}
+# list of characters we want
+included_characters <- c("Michael", "Dwight", "Jim", "Pam", "Ryan", "Andy", "Robert California", "Angela", "Stanley", "Kevin", "Creed", "Meredith", "Kelly", "Erin", "Toby", "Oscar", "Darryl", "Phyllis", "Gabe", "Holly", "Jan", "Roy", "Todd Packer", "David Wallace", "Karen", "Bob Vance", "Nellie")
+
+# only keep row if it is in the list
+transcripts <- transcripts[ transcripts$character %in% included_characters, ]
+
+# confirm that we know have only the characters we want
+unique(transcripts$character)
+```
+
+```{r}
+# new size of data
+nrow(transcripts)
+```
+
+We see that the dataset decreased from 55,130 lines to 49,125. We see that the included characters say roughly 89.1% of the lines in the whole show. 
+
+```{r}
+# obtain number of lines said by each character 
+# put into dataframe called line_counts
+
+line_counts <- transcripts %>% 
+  group_by(season, episode, character) %>%
+  count(character)
+
+# change data to format we want
+line_counts <- pivot_wider(line_counts, names_from = character, values_from = n)
+line_counts[is.na(line_counts)] <- 0
+
+# change column names
+colnames(line_counts) <- paste("lines", colnames(line_counts), sep="_")
+colnames(line_counts)[1] <- "season"
+colnames(line_counts)[2] <- "episode"
+
+head(line_counts)
+```
+
+```{r}
+# split sentences into words using unnest
+transcript_words <- transcripts %>% 
+  select(-text_w_direction) %>%
+  unnest_tokens(word, text)
+
+head(transcript_words)
+```
+
+```{r}
+# function returns a column of sentiment scores given a column of words
+sentiments_data <- transcript_words %>% 
+  left_join(get_sentiments("afinn")) %>%                 # get sentiment scores from AFINN
+  mutate(value = if_else(is.na(value), 0, value)) %>%    # make NA's -> 0 
+  group_by(season, episode, character) %>% 
+  summarize(avg_s = mean(value, na.rm = TRUE))           # gives us each character's avg sentiment per episode
+
+sentiments_data <- pivot_wider(sentiments_data, names_from = character, values_from = avg_s )   # change data to format we want
+sentiments_data[is.na(sentiments_data)] <- 0      # replace NA's w/ 0 (avg sentiment = 0 for absent characters)
+
+# fix column names
+colnames(sentiments_data) <- paste("s", colnames(sentiments_data), sep="_")
+colnames(sentiments_data)[1] <- "season"
+colnames(sentiments_data)[2] <- "episode"
+head(sentiments_data)
+
+head(sentiments_data)
+```
+
+```{r}
+# merge datasets
+data <- merge(line_counts, sentiments_data, by=c("season","episode"))
+```
+
+
+
+### BELOW DIS IS USELESS
+```{r}
+grouped_data <- test %>% 
+  select(season, episode, character, value, air_date, imdb_rating, total_votes) %>%
+  group_by(season, episode, character) 
+
+grouped_data <- grouped_data %>% 
+  mutate(value = if_else(is.na(value), 0, value))
+```
+
+
+```{r}
+grouped_data <- grouped_data %>% 
+  select(season, episode, character, value, air_date, imdb_rating, total_votes) %>%
+  group_by(season, episode, character) %>%
+  summarize(x = mean(value, na.rm = TRUE)) 
+```
+
+```{r}
+pivot_wider(grouped_data, names_from = character, values_from = x )
+```
+
+
+```{r}
+# TIDIF Stuff
+transcript_words %>% 
+  add_count(word) %>%
+  filter(n >= 20) %>%
+  count(word, character) %>%
+  bind_tf_idf(word, character, n) %>%
+  arrange(desc(tf_idf))
+```
+
+```{r}
+hist(transcripts$imdb_rating)
+```
 
 

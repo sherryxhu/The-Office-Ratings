@@ -1,0 +1,113 @@
+---
+title: "office"
+author: "Sherry Hu"
+date: "5/19/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# libraries 
+library(schrute)
+library(tibble)
+library(forcats)
+library(dplyr)
+library(ggplot2)
+library(tidytext)
+library(SentimentAnalysis)
+library(progress)
+```
+
+```{r}
+# load in data
+transcripts <- schrute::theoffice
+head(transcripts)
+
+ratings <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-03-17/office_ratings.csv')
+head(ratings)
+```
+
+```{r}
+# make season and episode integers
+transcripts %>% 
+  mutate(season = as.integer(season),
+         episode = as.integer(episode))
+```
+
+
+```{r}
+# average rating across 9 seasons 
+ratings %>% 
+  group_by(season) %>%
+  summarise(avg_rating = mean(imdb_rating)) %>%
+  ggplot(aes(season, avg_rating)) + 
+  geom_line() + 
+  scale_x_continuous(breaks =1:9)
+```
+
+```{r}
+# ratings by episode 
+ratings %>%
+  mutate(title = fct_inorder(title),
+         episode_number = row_number()) %>%
+  ggplot(aes(episode_number, imdb_rating)) + 
+  geom_line(group = 1) + 
+  geom_point(aes(color = factor(season))) + 
+  expand_limits(x = -8) + 
+  geom_smooth(group = 1) +
+  theme(axis.text.x = element_blank(), panel.grid.major.x = element_blank()) + 
+  labs(x = "Episode number",
+       y = "IMDB Rating",
+       title = "Popularity of The Office episodes over time",
+       subtitle = "Color represents season, size represents number of ratings")
+
+# ratings by episode w/ labels 
+ratings %>%
+  mutate(title = fct_inorder(title)) %>%
+  ggplot(aes(title, imdb_rating)) + 
+  geom_line(group = 1) + 
+  geom_point(aes(color = factor(season))) + 
+  geom_text(aes(label = title), check_overlap = TRUE, hjust = 1) + 
+  theme(axis.text.x = element_blank(), panel.grid.major.x = element_blank())
+```
+
+```{r}
+transcripts %>% count(character, sort = TRUE)
+```
+
+```{r}
+hist(ratings$imdb_rating)
+```
+
+
+```{r}
+#transcripts&sentiment <- analyzeSentiment(transcripts$text)$SentimentQDAP
+transcripts$sentiment <- integer(nrow(transcripts))
+data <- unique(select(transcripts, season, episode))
+unique_characters <- unique(transcripts$character)
+charac_count <- paste(unique_characters, "_count", sep="")
+charac_score <- paste(unique_characters, "_score", sep="")
+temp_df <- setNames(data.frame(matrix(0L, ncol = length(unique_characters)*2, nrow=nrow(data))), c(charac_count, charac_score))
+data <- merge(data, temp_df, by="row.names", all.x=TRUE)
+
+for (r in 1:nrow(data)) {
+  transcript_subset <- subset(transcripts, season==data[r,"season"] & episode==data[r,"episode"], select=c(character, text, sentiment))
+  for (row in 1:nrow(transcript_subset)) {
+    pb$tick()
+    character_name <- transcript_subset[row, "character"]
+    char_count <- paste(character_name,"_count",sep="")
+    char_score <- paste(character_name,"_score",sep="")
+    data[r,char_count] <- data[r,char_count] + 1
+    data[r,char_score] <- data[r,char_score] + analyzeSentiment(transcript_subset[row,"text"][[1]])$SentimentQDAP
+      #transcript_subset[row,"sentiment"]
+  }
+}
+
+```
+
+
+
+
