@@ -11,6 +11,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 # libraries 
+library(car)
+library(olsrr)
 library(schrute)
 library(tibble)
 library(forcats)
@@ -35,8 +37,10 @@ head(ratings)
 nrow(transcripts)
 ```
 
+* There are 55,130 lines said in all 9 seasons of The Office. 
+
 ```{r}
-# make season and episode integers
+# make season and episode factors
 # remove "" for parsing issues
 transcripts %>% 
   mutate(season = as.integer(season),
@@ -44,7 +48,7 @@ transcripts %>%
   mutate(character = str_remove_all(character, '"'))
 ```
 
-
+# EDA 
 ```{r}
 # average rating across 9 seasons 
 ratings %>% 
@@ -56,6 +60,8 @@ ratings %>%
   ggtitle("Average IMDB Rating for Seasons of The Office") + 
   xlab("Season") + ylab("Average IMDB Rating")
 ```
+
+* We see a huge dip in average rating after season 7. An initial hunch is that this is due to Steve Carell (Michael Scott), the main character, leaving this season. 
 
 ```{r}
 # ratings by episode 
@@ -83,16 +89,22 @@ ratings %>%
   theme(axis.text.x = element_blank(), panel.grid.major.x = element_blank())
 ```
 
+* This shows us ratings by episode. We note that the finale has the highest rating. The episode with the second highest rating is "Goodbye Michael", which was the last episode Carell was in. 
+
 ```{r}
 # Looking at how many lines each character has
 transcripts %>% count(character, sort = TRUE)
 ```
 
+* Michael has the most lines across all seasons, followed by Dwight, Jim, and Pam. From this, we can get a slight sense of who the main characters are. 
+
+* Note that Creed, who only says 396 lines across all seasons, is a character that is loved by a lot of people. Thus, when selecting characters, it may not be the best idea to just select the characters who say the most number of lines. 
+
 ```{r}
 unique(sort(transcripts$character))
 ```
 
-From the above list, we see that there are a lot of errors in spelling. For example, "Michael" and "Micahel" refer to the same character. We attempt to fix this to the best of our ability. 
+* Let's look at what characters are in the data. From the above list, we see that there are a lot of errors in spelling. For example, "Michael" and "Micahel" refer to the same character. We attempt to fix this to the best of our ability. 
 
 ```{r}
 # fixing Michael errors 
@@ -133,7 +145,7 @@ transcripts$character[transcripts$character == "Ryan Howard"] <- "Ryan"
 transcripts$character[transcripts$character == "sAndy"] <- "Andy"
 
 # fixing Robert California errors
-transcripts$character[transcripts$character == "Robert"] <- "Robert California"
+# transcripts$character[transcripts$character == "Robert"] <- "Robert California"
 
 # fixing Stanley errors
 transcripts$character[transcripts$character == "Stanely"] <- "Stanley"
@@ -177,11 +189,11 @@ transcripts$character[transcripts$character == "D"] <- "Dwight"
 
 ```
 
-Next, we would like to drop some characters. We only keep characters who are listed as "Main Characters" or "Supporting Characters" on this official wiki page for The Office: https://theoffice.fandom.com/wiki/Main_Characters. 
+* Next, we would like to drop some characters. As shown above, filtering characters by the number of lines said may not be the best idea. Instead, we only keep characters who are listed as "Main Characters" or "Supporting Characters" on this official wiki page for The Office: https://theoffice.fandom.com/wiki/Main_Characters. 
 
 ```{r}
 # list of characters we want
-included_characters <- c("Michael", "Dwight", "Jim", "Pam", "Ryan", "Andy", "Robert California", "Angela", "Stanley", "Kevin", "Creed", "Meredith", "Kelly", "Erin", "Toby", "Oscar", "Darryl", "Phyllis", "Gabe", "Holly", "Jan", "Roy", "Todd Packer", "David Wallace", "Karen", "Bob Vance", "Nellie")
+included_characters <- c("Michael", "Dwight", "Jim", "Pam", "Ryan", "Andy", "Robert", "Angela", "Stanley", "Kevin", "Creed", "Meredith", "Kelly", "Erin", "Toby", "Oscar", "Darryl", "Phyllis", "Gabe", "Holly", "Jan", "Roy", "Todd Packer", "David Wallace", "Karen", "Bob Vance", "Nellie")
 
 # only keep row if it is in the list
 transcripts <- transcripts[ transcripts$character %in% included_characters, ]
@@ -195,7 +207,7 @@ unique(transcripts$character)
 nrow(transcripts)
 ```
 
-We see that the dataset decreased from 55,130 lines to 49,125. We see that the included characters say roughly 89.1% of the lines in the whole show. 
+* The dataset decreases from 55,130 lines to 49,125. We see that the included characters say roughly 89.1% of the lines in the whole show. 
 
 ```{r}
 # obtain number of lines said by each character 
@@ -217,14 +229,18 @@ colnames(line_counts)[2] <- "episode"
 head(line_counts)
 ```
 
+* We obtain number of lines said by the characters we care about in each episode. 
+
 ```{r}
 # split sentences into words using unnest
 transcript_words <- transcripts %>% 
-  select(-text_w_direction) %>%
+  dplyr::select(-text_w_direction) %>%
   unnest_tokens(word, text)
 
 head(transcript_words)
 ```
+
+* Next, we want to look at average sentiment score of a character per episode. First, we tokenize the lines into words. 
 
 ```{r}
 # function returns a column of sentiment scores given a column of words
@@ -241,53 +257,161 @@ sentiments_data[is.na(sentiments_data)] <- 0      # replace NA's w/ 0 (avg senti
 colnames(sentiments_data) <- paste("s", colnames(sentiments_data), sep="_")
 colnames(sentiments_data)[1] <- "season"
 colnames(sentiments_data)[2] <- "episode"
-head(sentiments_data)
 
 head(sentiments_data)
 ```
 
+* We get our desired dataset, with average sentiment score of each character per episode. 
+
 ```{r}
+# first, reformat ratings from transcripts to merge properly
+ratings <- transcripts %>%
+  group_by(episode, season) %>%
+  summarize(rating = median(imdb_rating),
+  num_voters = median(total_votes))
+
 # merge datasets
 data <- merge(line_counts, sentiments_data, by=c("season","episode"))
+data <- merge(data, ratings, by=c("season", "episode"))
+
+# change season/episode to categorical variables
+data$season <- as.factor(data$season)
+data$episode <- as.factor(data$episode)
+head(data)
 ```
 
-
-
-### BELOW DIS IS USELESS
-```{r}
-grouped_data <- test %>% 
-  select(season, episode, character, value, air_date, imdb_rating, total_votes) %>%
-  group_by(season, episode, character) 
-
-grouped_data <- grouped_data %>% 
-  mutate(value = if_else(is.na(value), 0, value))
-```
-
+* We merge our datasets. 
 
 ```{r}
-grouped_data <- grouped_data %>% 
-  select(season, episode, character, value, air_date, imdb_rating, total_votes) %>%
-  group_by(season, episode, character) %>%
-  summarize(x = mean(value, na.rm = TRUE)) 
-```
+# add information in about writers
+writers <- transcripts %>%
+  dplyr::select(episode, season, writer) %>%
+  distinct()
 
-```{r}
-pivot_wider(grouped_data, names_from = character, values_from = x )
-```
+data <- merge(data, writers, by=c("season", "episode"))
 
+# add info about directors
+directors <- transcripts %>% 
+  dplyr::select(episode, season, director) %>%
+  distinct()
 
-```{r}
-# TIDIF Stuff
-transcript_words %>% 
-  add_count(word) %>%
-  filter(n >= 20) %>%
-  count(word, character) %>%
-  bind_tf_idf(word, character, n) %>%
-  arrange(desc(tf_idf))
+data <- merge(data, directors, by = c("season", "episode"))
 ```
 
 ```{r}
-hist(transcripts$imdb_rating)
+data$Mindy_Kaling <- ifelse(str_detect(data$writer, "Mindy Kaling"), 1, 0)
+data$Paul_Lieberstein <- ifelse(str_detect(data$writer, "Paul Lieberstein"), 1, 0)
+data$B.J._Novak <- ifelse(str_detect(data$writer, "B.J. Novak"), 1, 0)
+data$Michael_Schur <- ifelse(str_detect(data$writer, "Michael Schur"), 1, 0)
+
+data$Mindy_Kaling <- as.factor(data$Mindy_Kaling)
+data$Paul_Lieberstein <- as.factor(data$Paul_Lieberstein)
+data$B.J._Novak <- as.factor(data$B.J._Novak)
+data$Michael_Schur <- as.factor(data$Michael_Schur)
+
+data$Paul_Feig <- ifelse(str_detect(data$writer, "Paul Feig"), 1, 0)
+data$Randall_Einhorn <- ifelse(str_detect(data$writer, "Randall Einhorn"), 1, 0)
+data$Greg_Daniels <- ifelse(str_detect(data$writer, "Greg Daniels"), 1, 0)
+data$Ken_Kwapis <- ifelse(str_detect(data$writer, "Ken Kwapis"), 1, 0)
+
+data$Paul_Feig <- as.factor(data$Paul_Feig)
+data$Randall_Einhorn <- as.factor(data$Randall_Einhorn)
+data$Greg_Daniels <- as.factor(data$Greg_Daniels)
+data$Ken_Kwapis <- as.factor(data$Ken_Kwapis)
 ```
 
+* We notice that our data is on very different scales. To curve this issue, we divide the number of lines said by each character per episode by 100. 
+
+
+```{r}
+# scale lines said by each character
+for (i in 3:29){
+   data[,i] = data[,i]/100
+}
+```
+
+
+# Model Selection
+```{r}
+# initial model 
+data_ratings <- data[c(1:57,60:64)]
+#data_rating <- data%>%seplyr::select_se(data, )
+m1 <- lm(rating ~ episode + season + lines_Michael + lines_Jim + lines_Pam + lines_Dwight + s_Michael + s_Jim + s_Pam + s_Dwight , data = data_ratings)
+# m1 <- lmer(rating ~ . + (1|season), data = data)
+summary(m1)
+```
+
+```{r}
+vif(m1)
+plot(m1)
+```
+
+
+# Forward Selection
+```{r model1}
+# initial forward selection
+bigger.model <- formula(lm(rating ~ season + episode + lines_Michael + lines_Jim + lines_Dwight + lines_Pam + lines_Nellie + s_Michael + s_Pam + s_Dwight + s_Jim + lines_Stanley + s_Stanley + lines_Nellie + s_Nellie + lines_Toby + s_Toby + lines_Gabe + s_Gabe + lines_Ryan + s_Ryan + lines_Karen + s_Karen + lines_Robert + s_Robert + lines_Andy + s_Andy, data_ratings))
+
+v1.model <- step(m1, direction = "forward", scope = list(lower = m1, upper = bigger.model))
+
+interactions <- formula(lm(rating ~ season + episode + lines_Michael + lines_Jim + lines_Dwight + lines_Nellie + s_Michael + s_Pam + s_Dwight + lines_Stanley + s_Stanley + lines_Nellie + lines_Toby + s_Toby  + lines_Karen + s_Gabe + s_Andy + s_Ryan + season*lines_Michael + season*s_Michael + season*lines_Pam + season*lines_Jim + season*s_Jim + season*lines_Dwight + season*s_Dwight , data_ratings))
+
+v2.model <- step(v1.model, direction = "forward", scope = list(lower = v1.model, upper = interactions))
+
+writers <- formula(lm(rating ~ season + episode + lines_Michael + lines_Jim + lines_Dwight + lines_Pam + lines_Nellie + s_Michael + s_Pam + s_Dwight + s_Jim + lines_Stanley + s_Stanley + lines_Nellie + lines_Toby + s_Ryan + lines_Karen + s_Toby + s_Gabe + s_Andy + season*s_Dwight + Mindy_Kaling + B.J._Novak + Paul_Lieberstein + Michael_Schur + episode, data_ratings))
+
+final.model <- step(v2.model, direction = "forward", scope = list(lower = v2.model, upper = writers))
+```
+
+```{r}
+summary(final.model)
+plot(final.model)
+```
+
+# Cross Validation
+```{r}
+IDs = seq(1,186)
+
+# 80 - 20 test split
+test_size = 5 
+
+MSEs = c()
+MAEs = c()
+
+set.seed(0)
+for(i in 1:test_size){
+  set.seed(1)
+  train_IDs = sample(IDs, 148)
+  train = data_ratings[train_IDs,]
+  test = data_ratings[-train_IDs,]
+  
+  our_model = lm(rating ~ season + lines_Michael + lines_Jim + lines_Pam + lines_Dwight + 
+    s_Michael + s_Jim + s_Pam + s_Dwight + lines_Nellie + lines_Stanley + 
+    s_Stanley + s_Andy + lines_Toby + s_Gabe + s_Toby + season*s_Michael, data=train)
+  
+  predictions = predict(our_model, test)
+  residuals = predictions - test$rating
+  MSE = mean(residuals^2)
+  MAE = abs(residuals)
+  MSEs = c(MSEs, MSE)
+  MAEs = c(MAEs, MAE)
+}
+```
+
+```{r}
+print(mean(MSEs))
+print(mean(MAEs))
+```
+
+# Code below was not discussed in this submission 
+```{r model2}
+# complete forward selection
+#full.model <- formula(lm(rating ~ season + lines_Michael + lines_Jim + lines_Dwight + lines_Nellie + s_Michael + s_Pam + s_Dwight + s_Stanley + episode + lines_Angela + lines_Jan + lines_Kevin + lines_Oscar + lines_Phyllis + lines_Roy + lines_Ryan + lines_Stanley + lines_Kelly + lines_Toby + lines_Meredith + lines_Darryl + lines_Creed + lines_Andy + lines_Karen + lines_Holly + lines_Erin + lines_Gabe + s_Angela + s_Jan + s_Kevin + s_Oscar + s_Phyllis + s_Roy + s_Ryan + s_Kelly + s_Toby + s_Meredith + s_Darryl + s_Creed + s_Andy + s_Karen + s_Holly + s_Erin + s_Gabe + s_Nellie + Mindy_Kaling + Paul_Lieberstein + B.J._Novak + Michael_Schur + season*lines_Michael + season*s_Michael + season*lines_Pam + season*s_Pam + season*lines_Jim + season*s_Jim + season*lines_Dwight + season*s_Dwight + season*s_Stanley, data_ratings))
+
+#fwd.model <- step(v2.model, direction = 'forward', scope = list(lower = final.model, upper = full.model))
+```
+
+```{r}
+#summary(fwd.model)
+```
 
