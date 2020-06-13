@@ -166,8 +166,7 @@ transcripts$character[transcripts$character ==  "Phyliss"] <- "Phyllis"
 transcripts$character[transcripts$character ==  "Holy"] <- "Holly"
 
 # fixing Todd Packer errors
-transcripts$character[transcripts$character ==  "Sweeney Todd"] <- "Todd Packer"
-transcripts$character[transcripts$character ==  "Todd"] <- "Todd Packer"
+transcripts$character[transcripts$character ==  "Sweeney Todd"] <- "Todd"
 
 # fixing David Wallace errors
 transcripts$character[transcripts$character ==  "David Wallcve"] <- "David Wallace"
@@ -193,7 +192,7 @@ transcripts$character[transcripts$character == "D"] <- "Dwight"
 
 ```{r}
 # list of characters we want
-included_characters <- c("Michael", "Dwight", "Jim", "Pam", "Ryan", "Andy", "Robert", "Angela", "Stanley", "Kevin", "Creed", "Meredith", "Kelly", "Erin", "Toby", "Oscar", "Darryl", "Phyllis", "Gabe", "Holly", "Jan", "Roy", "Todd Packer", "David Wallace", "Karen", "Bob Vance", "Nellie")
+included_characters <- c("Michael", "Dwight", "Jim", "Pam", "Ryan", "Andy", "Robert", "Angela", "Stanley", "Kevin", "Creed", "Meredith", "Kelly", "Erin", "Toby", "Oscar", "Darryl", "Phyllis", "Gabe", "Holly", "Jan", "Roy", "Todd", "David Wallace", "Karen", "Bob Vance", "Nellie")
 
 # only keep row if it is in the list
 transcripts <- transcripts[ transcripts$character %in% included_characters, ]
@@ -314,6 +313,11 @@ data$Randall_Einhorn <- ifelse(str_detect(data$writer, "Randall Einhorn"), 1, 0)
 data$Greg_Daniels <- ifelse(str_detect(data$writer, "Greg Daniels"), 1, 0)
 data$Ken_Kwapis <- ifelse(str_detect(data$writer, "Ken Kwapis"), 1, 0)
 
+print(sum(data$Paul_Feig))
+print(sum(data$Randall_Einhorn))
+print(sum(data$Greg_Daniels))
+print(sum(data$Ken_Kwapis))
+
 data$Paul_Feig <- as.factor(data$Paul_Feig)
 data$Randall_Einhorn <- as.factor(data$Randall_Einhorn)
 data$Greg_Daniels <- as.factor(data$Greg_Daniels)
@@ -330,14 +334,35 @@ for (i in 3:29){
 }
 ```
 
+```{r}
+# encode first and last episode to column 
+data$firstep <- ifelse(data$episode == 1, 1, 0)
+data$last <- 0
+data$last[data$season == 1 & data$episode == 6] <- 1
+data$last[data$season == 2 & data$episode == 22] <- 1
+data$last[data$season == 3 & data$episode == 24] <- 1
+data$last[data$season == 4 & data$episode == 18] <- 1
+data$last[data$season == 5 & data$episode == 28] <- 1
+data$last[data$season == 6 & data$episode == 26] <- 1
+data$last[data$season == 7 & data$episode == 25] <- 1
+data$last[data$season == 8 & data$episode == 24] <- 1
+data$last[data$season == 9 & data$episode == 24] <- 1
+```
+
+```{r}
+# drop extra columns 
+data = subset(data, select = -c(num_voters))
+```
+
+```{r}
+head(data)
+```
+
 
 # Model Selection
 ```{r}
 # initial model 
-data_ratings <- data[c(1:57,60:64)]
-#data_rating <- data%>%seplyr::select_se(data, )
-m1 <- lm(rating ~ episode + season + lines_Michael + lines_Jim + lines_Pam + lines_Dwight + s_Michael + s_Jim + s_Pam + s_Dwight , data = data_ratings)
-# m1 <- lmer(rating ~ . + (1|season), data = data)
+m1 <- lm(rating ~ season + firstep + last + lines_Michael + lines_Jim + lines_Pam + lines_Dwight + s_Michael + s_Jim + s_Pam + s_Dwight , data = data)
 summary(m1)
 ```
 
@@ -347,18 +372,49 @@ plot(m1)
 ```
 
 
-# Forward Selection
-```{r model1}
-# initial forward selection
-bigger.model <- formula(lm(rating ~ season + episode + lines_Michael + lines_Jim + lines_Dwight + lines_Pam + lines_Nellie + s_Michael + s_Pam + s_Dwight + s_Jim + lines_Stanley + s_Stanley + lines_Nellie + s_Nellie + lines_Toby + s_Toby + lines_Gabe + s_Gabe + lines_Ryan + s_Ryan + lines_Karen + s_Karen + lines_Robert + s_Robert + lines_Andy + s_Andy, data_ratings))
+# Stepwise Selection
+```{r}
+# step on initial model + supporting characters
+m_support <- lm(rating ~  season + firstep + last + lines_Michael + lines_Jim + lines_Pam + lines_Dwight + lines_Nellie + lines_Stanley + lines_Toby + lines_Gabe + lines_Ryan + lines_Karen + lines_Robert + s_Michael + lines_Andy + lines_Jan + lines_Todd + s_Jim + s_Pam + s_Dwight + s_Nellie + s_Stanley + s_Toby + s_Gabe + s_Ryan + s_Karen + s_Robert + s_Andy + s_Jan + s_Todd, data = data)
 
-v1.model <- step(m1, direction = "forward", scope = list(lower = m1, upper = bigger.model))
+ols_step_both_aic(m_support)
+```
 
-interactions <- formula(lm(rating ~ season + episode + lines_Michael + lines_Jim + lines_Dwight + lines_Nellie + s_Michael + s_Pam + s_Dwight + lines_Stanley + s_Stanley + lines_Nellie + lines_Toby + s_Toby  + lines_Karen + s_Gabe + s_Andy + s_Ryan + season*lines_Michael + season*s_Michael + season*lines_Pam + season*lines_Jim + season*s_Jim + season*lines_Dwight + season*s_Dwight , data_ratings))
+```{r}
+# m support summary
+m_support <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Dwight + lines_Nellie + lines_Stanley + s_Gabe + s_Pam + s_Stanley + s_Ryan + s_Toby + s_Andy + lines_Dwight + s_Michael + lines_Todd, data = data)
+
+summary(m_support)
+```
+
+```{r}
+m_writer <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Dwight + lines_Nellie + lines_Stanley + s_Gabe + s_Pam + s_Stanley + s_Ryan + s_Toby + s_Andy + lines_Dwight + Mindy_Kaling + B.J._Novak + Paul_Lieberstein + Michael_Schur, data = data)
+
+ols_step_both_aic(m_writer)
+```
+
+
+```{r}
+# step on model w/ interactions
+m_interactions <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Dwight + lines_Nellie + lines_Stanley + s_Gabe + s_Pam + s_Stanley + s_Ryan + s_Toby + s_Andy + lines_Dwight + lines_Dwight*lines_Jim + lines_Dwight*lines_Angela + lines_Jim*lines_Pam + lines_Michael*lines_Ryan + lines_Erin*lines_Gabe + lines_Michael*lines_Holly + lines_Michael*lines_Pam + lines_Michael*lines_Jan + lines_Oscar*lines_Angela + lines_Andy*lines_Robert + s_Dwight*s_Angela + s_Andy*s_Robert + s_Pam*s_Michael, data = data)
+
+ols_step_both_aic(m_interactions)
+```
+
+```{r}
+m_interactions <- lm(rating ~ season + last + lines_Michael + lines_Nellie + lines_Stanley + s_Gabe + s_Pam + s_Stanley + s_Ryan + s_Toby + s_Andy + lines_Dwight*lines_Jim + s_Andy*s_Robert, data = data)
+
+summary(m_interactions)
+```
+
+
+
+```{r}
+interactions <- formula(lm(rating ~ season + first + last + lines_Michael + lines_Jim + lines_Dwight + lines_Pam + lines_Nellie + s_Michael + s_Jim + s_Pam + s_Dwight + lines_Stanley + s_Stanley + lines_Nellie + s_Toby + s_Gabe + s_Andy + s_Ryan + s_Robert +  lines_Jim*lines_Dwight + lines_Pam*s_Michael + lines_Jim*lines_Pam + lines_Dwight*lines_Angela + lines_Erin*lines_Andy + lines_Holly*lines_Michael, data))
 
 v2.model <- step(v1.model, direction = "forward", scope = list(lower = v1.model, upper = interactions))
 
-writers <- formula(lm(rating ~ season + episode + lines_Michael + lines_Jim + lines_Dwight + lines_Pam + lines_Nellie + s_Michael + s_Pam + s_Dwight + s_Jim + lines_Stanley + s_Stanley + lines_Nellie + lines_Toby + s_Ryan + lines_Karen + s_Toby + s_Gabe + s_Andy + season*s_Dwight + Mindy_Kaling + B.J._Novak + Paul_Lieberstein + Michael_Schur + episode, data_ratings))
+writers <- formula(lm(rating ~ season + first + last + lines_Michael + lines_Jim + lines_Dwight + lines_Pam + lines_Nellie + s_Michael + s_Jim + s_Pam + s_Dwight + lines_Stanley + s_Stanley + lines_Nellie + s_Toby + s_Gabe + s_Andy + s_Ryan + s_Robert +  lines_Jim*lines_Dwight + Mindy_Kaling + B.J._Novak + Paul_Lieberstein + Michael_Schur, data))
 
 final.model <- step(v2.model, direction = "forward", scope = list(lower = v2.model, upper = writers))
 ```
