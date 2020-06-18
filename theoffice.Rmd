@@ -307,21 +307,6 @@ data$Mindy_Kaling <- as.factor(data$Mindy_Kaling)
 data$Paul_Lieberstein <- as.factor(data$Paul_Lieberstein)
 data$B.J._Novak <- as.factor(data$B.J._Novak)
 data$Michael_Schur <- as.factor(data$Michael_Schur)
-
-data$Paul_Feig <- ifelse(str_detect(data$writer, "Paul Feig"), 1, 0)
-data$Randall_Einhorn <- ifelse(str_detect(data$writer, "Randall Einhorn"), 1, 0)
-data$Greg_Daniels <- ifelse(str_detect(data$writer, "Greg Daniels"), 1, 0)
-data$Ken_Kwapis <- ifelse(str_detect(data$writer, "Ken Kwapis"), 1, 0)
-
-print(sum(data$Paul_Feig))
-print(sum(data$Randall_Einhorn))
-print(sum(data$Greg_Daniels))
-print(sum(data$Ken_Kwapis))
-
-data$Paul_Feig <- as.factor(data$Paul_Feig)
-data$Randall_Einhorn <- as.factor(data$Randall_Einhorn)
-data$Greg_Daniels <- as.factor(data$Greg_Daniels)
-data$Ken_Kwapis <- as.factor(data$Ken_Kwapis)
 ```
 
 * We notice that our data is on very different scales. To curve this issue, we divide the number of lines said by each character per episode by 100. 
@@ -374,39 +359,127 @@ plot(m1)
 
 # Stepwise Selection
 ```{r}
-# step on initial model + supporting characters
-m_support <- lm(rating ~  season + firstep + last + lines_Michael + lines_Jim + lines_Pam + lines_Dwight + lines_Nellie + lines_Stanley + lines_Toby + lines_Gabe + lines_Ryan + lines_Karen + lines_Robert + s_Michael + lines_Andy + lines_Jan + lines_Todd + s_Jim + s_Pam + s_Dwight + s_Nellie + s_Stanley + s_Toby + s_Gabe + s_Ryan + s_Karen + s_Robert + s_Andy + s_Jan + s_Todd, data = data)
+# step on initial model + supporting characters lines
+m_support <- lm(rating ~  season + firstep + last + lines_Michael + lines_Jim + lines_Pam + lines_Dwight + lines_Nellie + lines_Stanley + lines_Toby + lines_Gabe + lines_Ryan + lines_Karen + lines_Robert + lines_Andy + lines_Jan + lines_Todd + lines_Kevin, data = data)
 
 ols_step_both_aic(m_support)
 ```
-
 ```{r}
-# m support summary
-m_support <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Dwight + lines_Nellie + lines_Stanley + s_Gabe + s_Pam + s_Stanley + s_Ryan + s_Toby + s_Andy + lines_Dwight + s_Michael + lines_Todd, data = data)
+# model from lines 
+m_support <- lm(rating ~  season + last + lines_Michael + lines_Jim + lines_Nellie + lines_Stanley + lines_Karen + lines_Todd + lines_Kevin, data = data)
 
 summary(m_support)
 ```
 
 ```{r}
-m_writer <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Dwight + lines_Nellie + lines_Stanley + s_Gabe + s_Pam + s_Stanley + s_Ryan + s_Toby + s_Andy + lines_Dwight + Mindy_Kaling + B.J._Novak + Paul_Lieberstein + Michael_Schur, data = data)
+# considering sentiment of characters
+m_sent <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Nellie + lines_Stanley + lines_Karen + lines_Todd + lines_Kevin + s_Michael + s_Jim + s_Pam + s_Dwight + s_Nellie + s_Stanley + s_Toby + s_Gabe + s_Ryan + s_Karen + s_Robert + s_Andy + s_Jan + s_Todd + s_Kevin + s_Oscar + s_Erin, data = data)
+
+ols_step_both_aic(m_sent)
+```
+
+```{r}
+m_sent <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Nellie + lines_Stanley + lines_Todd + lines_Kevin + s_Gabe + s_Pam + s_Stanley + s_Toby + s_Andy + s_Ryan, data = data)
+
+summary(m_sent)
+```
+
+```{r}
+# writer and director
+m_writer <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Nellie + lines_Stanley + lines_Todd + lines_Kevin + s_Gabe + s_Pam + s_Stanley + s_Toby + s_Andy + s_Ryan + writer + director, data = data)
 
 ols_step_both_aic(m_writer)
 ```
 
+```{r}
+# final model 
+m_final <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Nellie + lines_Stanley + lines_Todd + s_Gabe + s_Pam + s_Stanley + s_Toby + s_Andy + s_Ryan, data = data)
+```
 
 ```{r}
-# step on model w/ interactions
-m_interactions <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Dwight + lines_Nellie + lines_Stanley + s_Gabe + s_Pam + s_Stanley + s_Ryan + s_Toby + s_Andy + lines_Dwight + lines_Dwight*lines_Jim + lines_Dwight*lines_Angela + lines_Jim*lines_Pam + lines_Michael*lines_Ryan + lines_Erin*lines_Gabe + lines_Michael*lines_Holly + lines_Michael*lines_Pam + lines_Michael*lines_Jan + lines_Oscar*lines_Angela + lines_Andy*lines_Robert + s_Dwight*s_Angela + s_Andy*s_Robert + s_Pam*s_Michael, data = data)
-
-ols_step_both_aic(m_interactions)
+summary(m_final)
+plot(m_final)
 ```
+
+```{r}
+vif(m_final)
+```
+
+# Cross Validation
+```{r}
+IDs = seq(1,186)
+
+# 80 - 20 test split
+test_size = 5 
+
+MSEs = c()
+MAEs = c()
+
+set.seed(0)
+for(i in 1:test_size){
+  set.seed(1)
+  train_IDs = sample(IDs, 148)
+  train = data[train_IDs,]
+  test = data[-train_IDs,]
+  
+  our_model = lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Nellie + lines_Stanley + lines_Todd + s_Gabe + s_Pam + s_Stanley + s_Toby + s_Andy + s_Ryan, data = train)
+  
+  predictions = predict(our_model, test)
+  residuals = predictions - test$rating
+  MSE = mean(residuals^2)
+  MAE = abs(residuals)
+  MSEs = c(MSEs, MSE)
+  MAEs = c(MAEs, MAE)
+}
+```
+
+```{r}
+print(mean(MSEs))
+print(mean(MAEs))
+```
+
+# Data Clipped 
+```{r}
+data_clipped <- data[data$season != 8 || data$season!= 9]
+```
+
+```{r}
+# step on initial model + supporting characters lines
+m_support_clip <- lm(rating ~  season + firstep + last + lines_Michael + lines_Jim + lines_Pam + lines_Dwight + lines_Nellie + lines_Stanley + lines_Toby + lines_Gabe + lines_Ryan + lines_Karen + lines_Robert + lines_Andy + lines_Jan + lines_Todd + lines_Kevin, data = data_clipped)
+
+ols_step_both_aic(m_support)
+```
+
+```{r}
+# considering sentiment of characters
+m_sent_clip <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Nellie + lines_Stanley + lines_Karen + lines_Todd + lines_Kevin + s_Michael + s_Jim + s_Pam + s_Dwight + s_Nellie + s_Stanley + s_Toby + s_Gabe + s_Ryan + s_Karen + s_Robert + s_Andy + s_Jan + s_Todd + s_Kevin + s_Oscar + s_Erin, data = data_clipped)
+
+ols_step_both_aic(m_sent_clip)
+```
+
+```{r}
+# writer and director
+m_writer <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Nellie + lines_Stanley + lines_Todd + lines_Kevin + s_Gabe + s_Pam + s_Stanley + s_Toby + s_Andy + s_Ryan + writer + director, data = data_clipped)
+
+ols_step_both_aic(m_writer)
+```
+
+```{r}
+m_final_clipped <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Nellie + lines_Stanley + lines_Todd + lines_Kevin + s_Gabe + s_Pam + s_Stanley + s_Toby + s_Andy + s_Ryan, data = data_clipped)
+```
+
+```{r}
+summary(m_final_clipped)
+```
+
+
+# old stuff 
 
 ```{r}
 m_interactions <- lm(rating ~ season + last + lines_Michael + lines_Nellie + lines_Stanley + s_Gabe + s_Pam + s_Stanley + s_Ryan + s_Toby + s_Andy + lines_Dwight*lines_Jim + s_Andy*s_Robert, data = data)
 
 summary(m_interactions)
 ```
-
 
 
 ```{r}
@@ -424,40 +497,6 @@ summary(final.model)
 plot(final.model)
 ```
 
-# Cross Validation
-```{r}
-IDs = seq(1,186)
-
-# 80 - 20 test split
-test_size = 5 
-
-MSEs = c()
-MAEs = c()
-
-set.seed(0)
-for(i in 1:test_size){
-  set.seed(1)
-  train_IDs = sample(IDs, 148)
-  train = data_ratings[train_IDs,]
-  test = data_ratings[-train_IDs,]
-  
-  our_model = lm(rating ~ season + lines_Michael + lines_Jim + lines_Pam + lines_Dwight + 
-    s_Michael + s_Jim + s_Pam + s_Dwight + lines_Nellie + lines_Stanley + 
-    s_Stanley + s_Andy + lines_Toby + s_Gabe + s_Toby + season*s_Michael, data=train)
-  
-  predictions = predict(our_model, test)
-  residuals = predictions - test$rating
-  MSE = mean(residuals^2)
-  MAE = abs(residuals)
-  MSEs = c(MSEs, MSE)
-  MAEs = c(MAEs, MAE)
-}
-```
-
-```{r}
-print(mean(MSEs))
-print(mean(MAEs))
-```
 
 # Code below was not discussed in this submission 
 ```{r model2}
@@ -471,3 +510,9 @@ print(mean(MAEs))
 #summary(fwd.model)
 ```
 
+```{r}
+# step on model w/ interactions
+m_interactions <- lm(rating ~ season + last + lines_Michael + lines_Jim + lines_Dwight + lines_Nellie + lines_Stanley + s_Gabe + s_Pam + s_Stanley + s_Ryan + s_Toby + s_Andy + lines_Dwight + lines_Dwight*lines_Jim + lines_Dwight*lines_Angela + lines_Jim*lines_Pam + lines_Michael*lines_Ryan + lines_Erin*lines_Gabe + lines_Michael*lines_Holly + lines_Michael*lines_Pam + lines_Michael*lines_Jan + lines_Oscar*lines_Angela + lines_Andy*lines_Robert + s_Dwight*s_Angela + s_Andy*s_Robert + s_Pam*s_Michael, data = data)
+
+ols_step_both_aic(m_interactions)
+```
